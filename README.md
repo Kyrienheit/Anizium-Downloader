@@ -69,7 +69,7 @@ Bu proje arka planda aşağıdaki kütüphane ve araçları kullanmaktadır:
 
 - İndirme çok yavaş. - Bende hızlı.
 
-### Sorumluluk Reddi (Disclaimer)
+### Disclaimer
 Bu araç tamamen kişisel kullanım ve eğitim amaçlı geliştirilmiş bir web-scraping (veri kazıma) projesidir. Yazılım, herhangi bir video dosyasını barındırmaz, sunmaz veya dağıtmaz; sadece kullanıcının tarayıcısında yapabileceği işlemleri otomatikleştirir.
 
 İndirilen tüm içeriklerin telif hakları ilgili yayıncılara ve platformlara aittir. Geliştirici, bu aracın kullanımından doğabilecek hiçbir yasal sorumluluğu kabul etmez. Lütfen yerel telif hakkı yasalarına uyunuz.
