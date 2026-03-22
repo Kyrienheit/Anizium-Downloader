@@ -328,7 +328,7 @@ def main():
         elif not available_langs:
             # Fallback
             print("\n=== Dublaj dili (Varsayılan) ===")
-            dil_secim = input("1: Türkçe Dublaj \n2: İngilizce Dublaj\n3: Orijinal Ses/Japonca \nHangi dili indirmek istersiniz? (1/2/3) ").strip()
+            dil_secim = input("1: Türkçe Dublaj \n2: İngilizce Dublaj\n3: Orijinal Ses/Japonca \nDil seçin: (1/2/3) ").strip()
             if dil_secim == '2':
                 dil_eki = "endub"
             elif dil_secim == '3':
@@ -340,7 +340,7 @@ def main():
             for i, (ext, name) in enumerate(available_langs, 1):
                 print(f"{i}: {name}")
             
-            dil_idx = input(f"Hangi dili indirmek istersiniz? (1-{len(available_langs)}) [Varsayılan: 1]: ").strip()
+            dil_idx = input(f"Dil seçin: (1-{len(available_langs)}) : ").strip()
             try:
                 dil_idx = int(dil_idx)
                 if 1 <= dil_idx <= len(available_langs):
