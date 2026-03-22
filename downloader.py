@@ -293,21 +293,40 @@ def main():
 
         # Dil Seçimi - Ön Kontrol
         print("\n[INFO] Mevcut diller kontrol ediliyor...")
+        import requests
         
         test_embed_url = f"https://x.anizium.co/embed?u={user_token}&site=main&lang=tr&id={anime_id}&plan=lite&server=1&skin=beta&season={secilen_sezon}&episode={start_ep}"
         base_video_url = None
+        
+        # Ağ üzerinden gerçek video URL'sini yakala (blob URL sorununu atlatmak için)
+        captured_video_urls = []
+        def grab_video_url(req):
+            url = req.url
+            if (".mp4" in url or ".m3u8" in url) and str(anime_id) in url:
+                captured_video_urls.append(url)
+        
         try:
+            page.on("request", grab_video_url)
             page.goto(test_embed_url, wait_until="domcontentloaded", timeout=20000)
-            page.wait_for_selector("video", timeout=15000)
-            base_video_url = page.locator("video").get_attribute("src")
+            page.wait_for_timeout(5000)  # Video yüklensin diye bekle
+            page.remove_listener("request", grab_video_url)
+            
+            if captured_video_urls:
+                base_video_url = captured_video_urls[0]
+            else:
+                # Fallback: video src'ye bak (blob değilse)
+                try:
+                    src = page.locator("video").get_attribute("src")
+                    if src and not src.startswith("blob:"):
+                        base_video_url = src
+                except:
+                    pass
         except:
+            page.remove_listener("request", grab_video_url)
             base_video_url = None
 
         available_langs = []
         if base_video_url:
-            import requests
-            import re
-            
             diller_ve_ekler = [
                 ("trdub", "Türkçe Dublaj"),
                 ("endub", "İngilizce Dublaj"),
@@ -315,7 +334,7 @@ def main():
             ]
             
             for ext, name in diller_ve_ekler:
-                test_url = re.sub(r'\.(trdub|endub|original)\.mp4', f'.{ext}.mp4', base_video_url)
+                test_url = re.sub(r'\.(trdub|endub|original)\.(mp4|m3u8)', f'.{ext}.mp4', base_video_url)
                 try:
                     if requests.head(test_url, timeout=5).status_code == 200:
                         available_langs.append((ext, name))
@@ -365,20 +384,35 @@ def main():
             found_subtitles.clear() # Her bölüm için listeyi sıfırla
             logging.info(f"{'Film' if is_movie else f'S{int(secilen_sezon):02d}E{ep:02d}'} linki çözülüyor...")
             
-            # Embed URL oluşturma (Filmler için sezon/bölüm parametreleri belki farklıdır ama şimdilik aynı kalsın)
-            if is_movie:
-                embed_url = f"https://x.anizium.co/embed?u={user_token}&site=main&lang=tr&id={anime_id}&plan=lite&server=2&skin=art"
-            else:
-                embed_url = f"https://x.anizium.co/embed?u={user_token}&site=main&lang=tr&id={anime_id}&plan=lite&server=1&skin=beta&season={secilen_sezon}&episode={ep}"
+            # Embed URL oluşturma
+            embed_url = f"https://x.anizium.co/embed?u={user_token}&site=main&lang=tr&id={anime_id}&plan=lite&server=1&skin=beta&season={secilen_sezon}&episode={ep}"
             
             try:
+                # Ağ isteklerini dinleyerek gerçek video URL'sini yakala (blob URL sorununu atlatmak için)
+                ep_captured_urls = []
+                def grab_ep_video(req):
+                    url = req.url
+                    if (".mp4" in url or ".m3u8" in url) and str(anime_id) in url:
+                        ep_captured_urls.append(url)
+                
+                page.on("request", grab_ep_video)
                 page.goto(embed_url)
                 page.wait_for_selector("video", timeout=15000)
-                video_url = page.locator("video").get_attribute("src")
+                page.wait_for_timeout(4000)  # Video kaynağı yüklensin
+                page.remove_listener("request", grab_ep_video)
+                
+                # Önce ağdan yakalanan URL'yi dene, yoksa video src'ye bak
+                if ep_captured_urls:
+                    video_url = ep_captured_urls[0]
+                else:
+                    video_url = page.locator("video").get_attribute("src")
+                    if video_url and video_url.startswith("blob:"):
+                        logging.warning(f"Blob URL alındı, gerçek URL ağdan yakalanamadı: {video_url}")
+                        video_url = None
                 
                 if video_url:
                     # Linkin dil kısmını kullanıcının seçimine göre RegExp ile değiştir
-                    video_url = re.sub(r'\.(trdub|endub|original)\.mp4', f'.{dil_eki}.mp4', video_url)
+                    video_url = re.sub(r'\.(trdub|endub|original)\.(mp4|m3u8)', f'.{dil_eki}.mp4', video_url)
 
                     # Dosya ismindeki özel karakterleri (:, ?, /, vb.) temizle (Windows hata vermesin diye)
                     safe_name = "".join([c for c in anime_name if c.isalnum() or c in (" ", "-", "_")]).replace(" ", "_")
@@ -395,7 +429,7 @@ def main():
                         os.system(f'curl -s "{sub_url}" -o "{sub_file_name}"')
                         logging.info(f"Altyazı dosyası başarıyla indirildi: {sub_file_name}")
                 else:
-                    logging.warning(f"S{secilen_sezon}E{ep} video etiketi bulundu ancak kaynak adresi boş.")
+                    logging.warning(f"S{secilen_sezon}E{ep} için video URL'si alınamadı.")
                     
             except Exception as e:
                 logging.error(f"S{secilen_sezon}E{ep} atlandı. Hata: {e}")
