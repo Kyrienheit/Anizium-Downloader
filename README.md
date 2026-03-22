@@ -1,7 +1,10 @@
+> [!WARNING]
+> İlk açılışta bir kaç dakika bekletebilir, sonrakilerde hızlı açılır.
 # Anizium Downloader
 
 Anizium üzerinden dosya indirmeyi sağlayan terminal aracı.
 
+> 
 ## Özellikler
 * Bölüm aralığı verme:
 * Altyazıyı ayrı indirme:
