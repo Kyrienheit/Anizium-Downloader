@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+
+# Local Configuration
+config.json
+.env
+
+# Logs and debug files
+anizium_debug.log
+*.vtt
+*.mp4
+*.mp4.part
+
+# Playwright Debug & Temp Files
+*.html
+*.png
+*.txt
+!README.md
+!requirements.txt
+
+# Development / Test scripts
+test_*.py
+intercept_*.py
