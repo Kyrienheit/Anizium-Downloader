@@ -19,7 +19,7 @@ if !errorlevel! neq 0 (
     start /wait python_installer.exe /quiet InstallAllUsers=0 PrependPath=1
     del python_installer.exe
     echo [INFO] Kurulum tamamlandi. Script yeniden baslatiliyor...
-    start cmd /k "cd /d %~dp0 && run.bat"
+    start cmd /k "cd /d %~dp0 && anizcli.bat"
     exit /b
 )
 
