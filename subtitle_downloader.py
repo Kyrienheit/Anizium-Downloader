@@ -4,6 +4,14 @@ import re
 import json
 from playwright.sync_api import sync_playwright
 
+# Windows terminali ANSI renk destekle
+os.system("")
+C  = "\033[96m"   # Cyan  – başlıklar
+Y  = "\033[93m"   # Yellow – listeler / promptlar
+G  = "\033[92m"   # Green  – bilgi/otomatik
+R  = "\033[0m"    # Reset
+B  = "\033[1m"    # Bold
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -14,8 +22,8 @@ logging.basicConfig(
 )
 
 def main():
-    print("=== Anizium Altyazı İndirici ===")
-    anime_name = input("İndirmek istediğiniz anime adı: ")
+    print(f"{B}{C}=== Anizium Altyazı İndirici ==={R}")
+    anime_name = input(f"{Y}İndirmek istediğiniz anime adı: {R}")
 
     # Yapılandırma dosyasını yükle veya oluştur
     config_file = "config.json"
@@ -25,9 +33,9 @@ def main():
     else:
         print("Giriş bilgilerinizi girin:")
         config = {
-            "username": input("Anizium Kullanıcı Adı: "),
-            "password": input("Şifre: "),
-            "user_token": input("User Token (isteğe bağlı, boş bırakılabilir): ")
+            "username": input(f"{Y}Anizium Kullanıcı Adı: {R}"),
+            "password": input(f"{Y}Şifre: {R}"),
+            "user_token": input(f"{Y}User Token (isteğe bağlı, boş bırakılabilir): {R}")
         }
         with open(config_file, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=4)
@@ -46,11 +54,11 @@ def main():
 
     changed = False
     if not username_str:
-        username_str = input("Anizium kullanıcı adı: ").strip()
+        username_str = input(f"{Y}Anizium kullanıcı adı: {R}").strip()
         config["username"] = username_str
         changed = True
     if not password_str:
-        password_str = input("Şifre: ").strip()
+        password_str = input(f"{Y}Şifre: {R}").strip()
         config["password"] = password_str
         changed = True
     if changed:
@@ -176,19 +184,23 @@ def main():
                     browser.close()
                     return
 
-            print(f"\n=== '{anime_name}' İçin Arama Sonuçları ===")
+            print(f"\n{B}{C}=== '{anime_name}' İçin Arama Sonuçları ==={R}")
             for idx, anime in enumerate(unique_animes, 1):
-                print(f"{idx}: {anime['title']}")
+                print(f"{Y}{idx}: {anime['title']}{R}")
 
-            secim = input(f"\nAnime seç: (1-{len(unique_animes)}): ").strip()
-            try:
-                secim_idx = int(secim)
-                if 1 <= secim_idx <= len(unique_animes):
-                    secilen_anime = unique_animes[secim_idx - 1]
-                else:
-                    secilen_anime = unique_animes[0]
-            except ValueError:
+            if len(unique_animes) == 1:
                 secilen_anime = unique_animes[0]
+                print(f"{G}[INFO] Tek sonuç, otomatik seçildi: {secilen_anime['title']}{R}")
+            else:
+                secim = input(f"{Y}\nAnime seç: (1-{len(unique_animes)}): {R}").strip()
+                try:
+                    secim_idx = int(secim)
+                    if 1 <= secim_idx <= len(unique_animes):
+                        secilen_anime = unique_animes[secim_idx - 1]
+                    else:
+                        secilen_anime = unique_animes[0]
+                except ValueError:
+                    secilen_anime = unique_animes[0]
 
             anime_id = secilen_anime['ID']
             anime_name = secilen_anime['title']
@@ -233,18 +245,22 @@ def main():
                 browser.close()
                 return
 
-            print("\n=== Mevcut Sezonlar ===")
+            print(f"\n{B}{C}=== Mevcut Sezonlar ==={R}")
             for s, ep_count in seasons_data.items():
-                print(f"Sezon {s}: Toplam {ep_count} Bölüm")
+                print(f"{Y}Sezon {s}: Toplam {ep_count} Bölüm{R}")
 
-            secilen_sezon = input("\nSezon seç: ")
-            if secilen_sezon not in seasons_data:
-                logging.error("Geçersiz sezon numarası.")
-                browser.close()
-                return
+            if len(seasons_data) == 1:
+                secilen_sezon = list(seasons_data.keys())[0]
+                print(f"{G}[INFO] Tek sezon, otomatik seçildi: Sezon {secilen_sezon}{R}")
+            else:
+                secilen_sezon = input(f"{Y}\nSezon seç: {R}")
+                if secilen_sezon not in seasons_data:
+                    logging.error("Geçersiz sezon numarası.")
+                    browser.close()
+                    return
 
             max_ep = seasons_data[secilen_sezon]
-            secilen_bolum = input(f"Bölüm seç: ").strip()
+            secilen_bolum = input(f"{Y}Bölüm seç: {R}").strip()
 
             episodes_to_download = []
             if secilen_bolum.lower() == 'all':
@@ -267,50 +283,137 @@ def main():
         # 4. ALTYAZI İNDİRME DÖNGÜSÜ
         print("\n")
 
-        found_subtitles = []
-        page.on("request", lambda req: found_subtitles.append(req.url) if ".vtt" in req.url else None)
+        # ─────────────────────────────────────────────────────────────────────
+        # Yardımcı: /anime/source API'sini embed üzerinden yakala
+        # ─────────────────────────────────────────────────────────────────────
+        def fetch_source(ep_no):
+            captured = [None]
 
-        for ep in episodes_to_download:
-            found_subtitles.clear()
-            logging.info(f"{'Film' if is_movie else f'S{int(secilen_sezon):02d}E{ep:02d}'} embed açılıyor (altyazı için)...")
+            def on_res(res):
+                if "anime/source" in res.url:
+                    try:
+                        captured[0] = res.json()
+                    except:
+                        pass
 
             if is_movie:
-                embed_url = f"https://x.anizium.co/embed?u={user_token}&site=main&lang=tr&id={anime_id}&plan=lite&server=2&skin=art"
+                embed_url = (
+                    f"https://x.anizium.co/embed?u={user_token}"
+                    f"&site=main&lang=tr&id={anime_id}"
+                    f"&plan=lite&server=2&skin=art"
+                )
             else:
-                embed_url = f"https://x.anizium.co/embed?u={user_token}&site=main&lang=tr&id={anime_id}&plan=lite&server=1&skin=beta&season={secilen_sezon}&episode={ep}"
-
+                embed_url = (
+                    f"https://x.anizium.co/embed?u={user_token}"
+                    f"&site=main&lang=tr&id={anime_id}"
+                    f"&plan=lite&server=1&skin=beta"
+                    f"&season={secilen_sezon}&episode={ep_no}"
+                )
             try:
-                page.goto(embed_url)
-                page.wait_for_selector("video", timeout=15000)
-                # Video URL'sine gerek yok, sadece altyazı isteğinin tetiklenmesini bekliyoruz
-                page.wait_for_timeout(3000)
+                page.on("response", on_res)
+                page.goto(embed_url, wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(6000)
+                page.remove_listener("response", on_res)
+            except:
+                try:
+                    page.remove_listener("response", on_res)
+                except:
+                    pass
+            return captured[0]
 
-                safe_name = "".join([c for c in anime_name if c.isalnum() or c in (" ", "-", "_")]).replace(" ", "_")
+        # ─────────────────────────────────────────────────────────────────────
+        # Probe: ilk bölümden altyazı seçeneklerini öğren
+        # ─────────────────────────────────────────────────────────────────────
+        first_ep = episodes_to_download[0]
+        logging.info(f"Mevcut altyazı dilleri kontrol ediliyor (bölüm {first_ep})...")
+        probe_data = fetch_source(first_ep)
 
-                if is_movie:
-                    sub_file_name = os.path.join(download_path, f"{safe_name}_film.vtt")
+        if probe_data and probe_data.get("success"):
+            probe_subtitles = probe_data.get("subtitles", [])
+        else:
+            err_msg = probe_data.get("msg", "Bilinmeyen hata") if probe_data else "API yanıt vermedi"
+            logging.warning(f"İlk bölüm kaynak verisi alınamadı: {err_msg}")
+            probe_subtitles = []
+
+        # ── Altyazı dili seçimi ───────────────────────────────────────────────
+        chosen_sub = None   # {"group": "tr", "name": "Türkçe", "link": "..."}
+
+        if not probe_subtitles:
+            logging.warning("Bu bölüm/anime için altyazı bulunamadı.")
+        elif len(probe_subtitles) == 1:
+            chosen_sub = probe_subtitles[0]
+            print(f"{G}\n[INFO] Tek altyazı seçeneği, otomatik seçildi: {chosen_sub['name']}{R}")
+        else:
+            print(f"\n{B}{C}=== Mevcut Altyazı Dilleri ==={R}")
+            for i, s in enumerate(probe_subtitles, 1):
+                print(f"{Y}{i}: {s['name']} [{s['group']}]{R}")
+            while True:
+                sub_sec = input(f"{Y}\nAltyazı dili seç (1-{len(probe_subtitles)}): {R}").strip()
+                try:
+                    sub_idx = int(sub_sec)
+                    if 1 <= sub_idx <= len(probe_subtitles):
+                        chosen_sub = probe_subtitles[sub_idx - 1]
+                        break
+                    else:
+                        print("Geçersiz seçim, tekrar deneyin.")
+                except ValueError:
+                    print("Lütfen bir sayı girin.")
+            logging.info(f"Seçilen altyazı: {chosen_sub}")
+
+        # ─────────────────────────────────────────────────────────────────────
+        # Bölüm döngüsü
+        # ─────────────────────────────────────────────────────────────────────
+        for ep in episodes_to_download:
+            label = "Film" if is_movie else f"S{int(secilen_sezon):02d}E{ep:02d}"
+            logging.info(f"{label} altyazısı indiriliyor...")
+
+            if ep == first_ep and probe_data:
+                src_data = probe_data
+            else:
+                src_data = fetch_source(ep)
+
+            if not src_data:
+                logging.error(f"{label} atlandı: API yanıt vermedi.")
+                continue
+
+            if not src_data.get("success", False):
+                msg = src_data.get("msg", "Bilinmeyen hata")[:120]
+                logging.warning(f"{label} atlandı: {msg}")
+                continue
+
+            ep_subtitles = src_data.get("subtitles", [])
+            if not ep_subtitles:
+                logging.warning(f"{label} için altyazı bulunamadı.")
+                continue
+
+            # Seçilen dili bu bölüm için bul
+            if chosen_sub:
+                ep_sub = next(
+                    (s for s in ep_subtitles if s["group"] == chosen_sub["group"]),
+                    ep_subtitles[0]
+                )
+            else:
+                ep_sub = ep_subtitles[0]
+
+            sub_url = ep_sub["link"]
+            safe_name = "".join([c for c in anime_name if c.isalnum() or c in (" ", "-", "_")]).replace(" ", "_")
+
+            if is_movie:
+                sub_file_name = os.path.join(download_path, f"{safe_name}_film.vtt")
+            else:
+                sub_file_name = os.path.join(download_path, f"{safe_name}_S{int(secilen_sezon):02d}E{ep:02d}.vtt")
+
+            logging.info(f"Altyazı URL: {sub_url}")
+            try:
+                response = page.request.get(sub_url)
+                if response.ok:
+                    with open(sub_file_name, "wb") as sf:
+                        sf.write(response.body())
+                    logging.info(f"Altyazı indirildi: {sub_file_name}")
                 else:
-                    sub_file_name = os.path.join(download_path, f"{safe_name}_S{int(secilen_sezon):02d}E{ep:02d}.vtt")
-
-                if found_subtitles:
-                    sub_url = found_subtitles[0]
-                    logging.info(f"Altyazı bulundu: {sub_url}")
-                    # Playwright'ın kendi request API'si ile indir — cookie/session otomatik taşınır, 403 olmaz
-                    try:
-                        response = page.request.get(sub_url)
-                        if response.ok:
-                            with open(sub_file_name, "wb") as sub_f:
-                                sub_f.write(response.body())
-                            logging.info(f"Altyazı indirildi: {sub_file_name}")
-                        else:
-                            logging.error(f"Altyazı indirilemedi: HTTP {response.status}")
-                    except Exception as dl_err:
-                        logging.error(f"Altyazı indirilemedi: {dl_err}")
-                else:
-                    logging.warning(f"{'Film' if is_movie else f'S{secilen_sezon}E{ep}'} için altyazı bulunamadı.")
-
-            except Exception as e:
-                logging.error(f"{'Film' if is_movie else f'S{secilen_sezon}E{ep}'} atlandı. Hata: {e}")
+                    logging.error(f"Altyazı indirilemedi: HTTP {response.status}")
+            except Exception as dl_err:
+                logging.error(f"Altyazı indirilemedi: {dl_err}")
 
         browser.close()
         logging.info("Tüm altyazı işlemleri tamamlandı.")

@@ -3,6 +3,14 @@ import logging
 import re
 from playwright.sync_api import sync_playwright
 
+# Windows terminali ANSI renk destekle
+os.system("")
+C  = "\033[96m"   # Cyan  – başlıklar
+Y  = "\033[93m"   # Yellow – listeler
+G  = "\033[92m"   # Green  – bilgi/otomatik
+R  = "\033[0m"    # Reset
+B  = "\033[1m"    # Bold
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -13,8 +21,8 @@ logging.basicConfig(
 )
 
 def main():
-    print("=== Anizium Downloader ===")
-    anime_name = input("İndirmek istediğiniz anime adı: ")
+    print(f"{B}{C}=== Anizium Downloader ==={R}")
+    anime_name = input(f"{Y}İndirmek istediğiniz anime adı: {R}")
     
     # Yapılandırma dosyasını yükle veya oluştur
     config_file = "config.json"
@@ -26,9 +34,9 @@ def main():
         print("Giriş bilgilerinizi girin:")
         import json
         config = {
-            "username": input("Anizium Kullanıcı Adı: "),
-            "password": input("Şifre: "),
-            "user_token": input("User Token (isteğe bağlı, boş bırakılabilir): ")
+            "username": input(f"{Y}Anizium Kullanıcı Adı: {R}"),
+            "password": input(f"{Y}Şifre: {R}"),
+            "user_token": input(f"{Y}User Token (isteğe bağlı, boş bırakılabilir): {R}")
         }
         with open(config_file, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=4)
@@ -51,11 +59,11 @@ def main():
     # Kullanıcı adı veya şifre boşsa sor ve kaydet
     changed = False
     if not username_str:
-        username_str = input("Anizium kullanıcı adı: ").strip()
+        username_str = input(f"{Y}Anizium kullanıcı adı: {R}").strip()
         config["username"] = username_str
         changed = True
     if not password_str:
-        password_str = input("Şifre: ").strip()
+        password_str = input(f"{Y}Şifre: {R}").strip()
         config["password"] = password_str
         changed = True
     if changed:
@@ -201,19 +209,23 @@ def main():
                     browser.close()
                     return
 
-            print(f"\n=== '{anime_name}' İçin Arama Sonuçları ===")
+            print(f"\n{B}{C}=== '{anime_name}' İçin Arama Sonuçları ==={R}")
             for idx, anime in enumerate(unique_animes, 1):
-                print(f"{idx}: {anime['title']}")
-                
-            secim = input(f"\nAnime seç: (1-{len(unique_animes)}): ").strip()
-            try:
-                secim_idx = int(secim)
-                if 1 <= secim_idx <= len(unique_animes):
-                    secilen_anime = unique_animes[secim_idx - 1]
-                else:
-                    secilen_anime = unique_animes[0]
-            except ValueError:
+                print(f"{Y}{idx}: {anime['title']}{R}")
+
+            if len(unique_animes) == 1:
                 secilen_anime = unique_animes[0]
+                print(f"{G}[INFO] Tek sonuç, otomatik seçildi: {secilen_anime['title']}{R}")
+            else:
+                secim = input(f"{Y}\nAnime seç: (1-{len(unique_animes)}): {R}").strip()
+                try:
+                    secim_idx = int(secim)
+                    if 1 <= secim_idx <= len(unique_animes):
+                        secilen_anime = unique_animes[secim_idx - 1]
+                    else:
+                        secilen_anime = unique_animes[0]
+                except ValueError:
+                    secilen_anime = unique_animes[0]
                 
             anime_id = secilen_anime['ID']
             anime_name = secilen_anime['title']
@@ -258,18 +270,22 @@ def main():
                 browser.close()
                 return
 
-            print("\n=== Mevcut Sezonlar ===")
+            print(f"\n{B}{C}=== Mevcut Sezonlar ==={R}")
             for s, ep_count in seasons_data.items():
-                print(f"Sezon {s}: Toplam {ep_count} Bölüm")
-            
-            secilen_sezon = input("\nSezon seç: (hayır bütün sezonlar tuşu yok) ")
-            if secilen_sezon not in seasons_data:
-                logging.error("Geçersiz sezon numarası.")
-                browser.close()
-                return
+                print(f"{Y}Sezon {s}: Toplam {ep_count} Bölüm{R}")
+
+            if len(seasons_data) == 1:
+                secilen_sezon = list(seasons_data.keys())[0]
+                print(f"{G}[INFO] Tek sezon, otomatik seçildi: Sezon {secilen_sezon}{R}")
+            else:
+                secilen_sezon = input(f"{Y}\nSezon seç: {R}")
+                if secilen_sezon not in seasons_data:
+                    logging.error("Geçersiz sezon numarası.")
+                    browser.close()
+                    return
                 
             max_ep = seasons_data[secilen_sezon]
-            secilen_bolum = input(f"Bölüm seç: ").strip()
+            secilen_bolum = input(f"{Y}Bölüm seç: {R}").strip()
             
             episodes_to_download = []
             if secilen_bolum.lower() == 'all':
@@ -291,148 +307,200 @@ def main():
             end_ep = 1
             logging.info("Film algılandı, bölüm seçimi atlanıyor.")
 
-        # Dil Seçimi - Ön Kontrol
-        print("\n[INFO] Mevcut diller kontrol ediliyor...")
-        import requests
-        
-        test_embed_url = f"https://x.anizium.co/embed?u={user_token}&site=main&lang=tr&id={anime_id}&plan=lite&server=1&skin=beta&season={secilen_sezon}&episode={start_ep}"
-        base_video_url = None
-        
-        # Ağ üzerinden gerçek video URL'sini yakala (blob URL sorununu atlatmak için)
-        captured_video_urls = []
-        def grab_video_url(req):
-            url = req.url
-            if (".mp4" in url or ".m3u8" in url) and str(anime_id) in url:
-                captured_video_urls.append(url)
-        
-        try:
-            page.on("request", grab_video_url)
-            page.goto(test_embed_url, wait_until="domcontentloaded", timeout=20000)
-            page.wait_for_timeout(5000)  # Video yüklensin diye bekle
-            page.remove_listener("request", grab_video_url)
-            
-            if captured_video_urls:
-                base_video_url = captured_video_urls[0]
-            else:
-                # Fallback: video src'ye bak (blob değilse)
-                try:
-                    src = page.locator("video").get_attribute("src")
-                    if src and not src.startswith("blob:"):
-                        base_video_url = src
-                except:
-                    pass
-        except:
-            page.remove_listener("request", grab_video_url)
-            base_video_url = None
-
-        available_langs = []
-        if base_video_url:
-            diller_ve_ekler = [
-                ("trdub", "Türkçe Dublaj"),
-                ("endub", "İngilizce Dublaj"),
-                ("original", "Orijinal Ses/Japonca")
-            ]
-            
-            for ext, name in diller_ve_ekler:
-                test_url = re.sub(r'\.(trdub|endub|original)\.(mp4|m3u8)', f'.{ext}.mp4', base_video_url)
-                try:
-                    if requests.head(test_url, timeout=5).status_code == 200:
-                        available_langs.append((ext, name))
-                except:
-                    pass
-
-        if len(available_langs) == 1:
-            dil_eki, dil_adi = available_langs[0]
-            print(f"\n[INFO] Yalnızca 1 dil seçeneği mevcut. Otomatik seçiliyor: {dil_adi}")
-        elif not available_langs:
-            # Fallback
-            print("\n=== Dublaj dili (Varsayılan) ===")
-            dil_secim = input("1: Türkçe Dublaj \n2: İngilizce Dublaj\n3: Orijinal Ses/Japonca \nDil seçin: (1/2/3) ").strip()
-            if dil_secim == '2':
-                dil_eki = "endub"
-            elif dil_secim == '3':
-                dil_eki = "original"
-            else:
-                dil_eki = "trdub"
-        else:
-            print("\n=== Dublaj Dilleri ===")
-            for i, (ext, name) in enumerate(available_langs, 1):
-                print(f"{i}: {name}")
-            
-            dil_idx = input(f"Dil seçin: (1-{len(available_langs)}) : ").strip()
-            try:
-                dil_idx = int(dil_idx)
-                if 1 <= dil_idx <= len(available_langs):
-                    dil_eki = available_langs[dil_idx - 1][0]
-                else:
-                    dil_eki = available_langs[0][0]
-            except ValueError:
-                dil_eki = available_langs[0][0]
-
-        # 4. İNDİRME DÖNGÜSÜ
-        print("\n")
-        
-        # Altyazıları yakalamak için Event Listener ekle
-        found_subtitles = []
-        page.on("request", lambda req: found_subtitles.append(req.url) if ".vtt" in req.url else None)
-
         # Film için episodes_to_download set edilmemişti, şimdi set ediyoruz
         if is_movie:
             episodes_to_download = [1]
 
-        for ep in episodes_to_download:
-            found_subtitles.clear() # Her bölüm için listeyi sıfırla
-            logging.info(f"{'Film' if is_movie else f'S{int(secilen_sezon):02d}E{ep:02d}'} linki çözülüyor...")
-            
-            # Embed URL oluşturma
-            embed_url = f"https://x.anizium.co/embed?u={user_token}&site=main&lang=tr&id={anime_id}&plan=lite&server=1&skin=beta&season={secilen_sezon}&episode={ep}"
-            
-            try:
-                # Ağ isteklerini dinleyerek gerçek video URL'sini yakala (blob URL sorununu atlatmak için)
-                ep_captured_urls = []
-                def grab_ep_video(req):
-                    url = req.url
-                    if (".mp4" in url or ".m3u8" in url) and str(anime_id) in url:
-                        ep_captured_urls.append(url)
-                
-                page.on("request", grab_ep_video)
-                page.goto(embed_url)
-                page.wait_for_selector("video", timeout=15000)
-                page.wait_for_timeout(4000)  # Video kaynağı yüklensin
-                page.remove_listener("request", grab_ep_video)
-                
-                # Önce ağdan yakalanan URL'yi dene, yoksa video src'ye bak
-                if ep_captured_urls:
-                    video_url = ep_captured_urls[0]
-                else:
-                    video_url = page.locator("video").get_attribute("src")
-                    if video_url and video_url.startswith("blob:"):
-                        logging.warning(f"Blob URL alındı, gerçek URL ağdan yakalanamadı: {video_url}")
-                        video_url = None
-                
-                if video_url:
-                    # Linkin dil kısmını kullanıcının seçimine göre RegExp ile değiştir
-                    video_url = re.sub(r'\.(trdub|endub|original)\.(mp4|m3u8)', f'.{dil_eki}.mp4', video_url)
+        # ─────────────────────────────────────────────────────────────────────
+        # Yardımcı: /anime/source API'sini doğrudan çağır, JSON döndür
+        # ─────────────────────────────────────────────────────────────────────
+        def fetch_source(ep_no):
+            """
+            İlgili bölümün kaynak verisini döndürür: {"success":true/false, "subtitles":[], "groups":[]}
+            Başarısız/hata durumunda None döner.
+            """
+            api_url = (
+                f"https://api.anizium.co/anime/source"
+                f"?id={anime_id}&season={secilen_sezon}&episode={ep_no}"
+                f"&server=1&plan=lite&u={user_token}&lang=tr"
+            )
+            captured = [None]
 
-                    # Dosya ismindeki özel karakterleri (:, ?, /, vb.) temizle (Windows hata vermesin diye)
-                    safe_name = "".join([c for c in anime_name if c.isalnum() or c in (" ", "-", "_")]).replace(" ", "_")
-                    file_name = os.path.join(download_path, f"{safe_name}_S{int(secilen_sezon):02d}E{ep:02d}_{dil_eki}.mp4")
-                    
-                    logging.info(f"Yönlendirilen Video Adresi: {video_url}")
-                    logging.info(f"Video bulundu! İniyor: {file_name}")
-                    os.system(f'python -m yt_dlp "{video_url}" -o "{file_name}"')
-                    
-                    if found_subtitles:
-                        sub_url = found_subtitles[0]
-                        sub_file_name = file_name.replace('.mp4', '.vtt')
-                        logging.info(f"Altyazı bulundu: {sub_url}")
-                        os.system(f'curl -s "{sub_url}" -o "{sub_file_name}"')
-                        logging.info(f"Altyazı dosyası başarıyla indirildi: {sub_file_name}")
-                else:
-                    logging.warning(f"S{secilen_sezon}E{ep} için video URL'si alınamadı.")
-                    
-            except Exception as e:
-                logging.error(f"S{secilen_sezon}E{ep} atlandı. Hata: {e}")
+            def on_res(res):
+                if "anime/source" in res.url:
+                    try:
+                        captured[0] = res.json()
+                    except:
+                        pass
+
+            embed_url = (
+                f"https://x.anizium.co/embed?u={user_token}"
+                f"&site=main&lang=tr&id={anime_id}"
+                f"&plan=lite&server=1&skin=beta&season={secilen_sezon}&episode={ep_no}"
+            )
+            try:
+                page.on("response", on_res)
+                page.goto(embed_url, wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(6000)
+                page.remove_listener("response", on_res)
+            except:
+                try:
+                    page.remove_listener("response", on_res)
+                except:
+                    pass
+            return captured[0]
+
+        # ─────────────────────────────────────────────────────────────────────
+        # Probe: ilk bölümden dub ve altyazı seçeneklerini öğren
+        # ─────────────────────────────────────────────────────────────────────
+        print("\n[INFO] Mevcut diller ve altyazılar kontrol ediliyor...")
+        first_ep = episodes_to_download[0]
+        probe_data = fetch_source(first_ep)
+
+        if probe_data and probe_data.get("success"):
+            groups    = probe_data.get("groups", [])      # dublaj seçenekleri
+            subtitles = probe_data.get("subtitles", [])   # altyazı seçenekleri
+        else:
+            err_msg = probe_data.get("msg", "Bilinmeyen hata") if probe_data else "API yanıt vermedi"
+            logging.warning(f"İlk bölüm kaynak verisi alınamadı: {err_msg}")
+            groups    = []
+            subtitles = []
+
+        # ── Dublaj dili seçimi ────────────────────────────────────────────────
+        chosen_group = None   # {"group": "original", "name": "Japonca", "items": [...]}
+
+        if not groups:
+            # groups boş — bölüm bakımda vs. yine de devam etmeyi dene
+            logging.warning("Hiçbir dublaj grubu bulunamadı. Varsayılan olarak 'original' kullanılacak.")
+            chosen_dil_eki = "original"
+        elif len(groups) == 1:
+            chosen_group = groups[0]
+            chosen_dil_eki = chosen_group["group"]
+            print(f"{G}\n[INFO] Tek ses seçeneği, otomatik seçildi: {chosen_group['name']}{R}")
+
+        else:
+            print(f"\n{B}{C}=== Mevcut Ses/Dublaj Seçenekleri ==={R}")
+            for i, g in enumerate(groups, 1):
+                print(f"{Y}{i}: {g['name']}{R}")
+            while True:
+                dil_sec = input(f"{Y}\nSes seç (1-{len(groups)}): {R}").strip()
+                try:
+                    dil_idx = int(dil_sec)
+                    if 1 <= dil_idx <= len(groups):
+                        chosen_group = groups[dil_idx - 1]
+                        chosen_dil_eki = chosen_group["group"]
+                        break
+                    else:
+                        print("Geçersiz seçim, tekrar deneyin.")
+                except ValueError:
+                    print("Lütfen bir sayı girin.")
+
+        # ── Kalite seçimi (720p varsayılan) ──────────────────────────────────
+        chosen_quality = 720   # yt-dlp zaten en iyiyi seçer ama biz de saklayalım
+
+        # ── Altyazı dili seçimi ───────────────────────────────────────────────
+        chosen_sub_group = None   # {"group": "tr", "name": "Türkçe", "link": "..."}
+
+        if not subtitles:
+            logging.warning("Bu bölüm için altyazı bulunamadı.")
+        elif len(subtitles) == 1:
+            chosen_sub_group = subtitles[0]
+            print(f"{G}\n[INFO] Tek altyazı seçeneği, otomatik seçildi: {chosen_sub_group['name']}{R}")
+        else:
+            print(f"\n{B}{C}=== Mevcut Altyazı Dilleri ==={R}")
+            for i, s in enumerate(subtitles, 1):
+                print(f"{Y}{i}: {s['name']} [{s['group']}]{R}")
+            while True:
+                sub_sec = input(f"{Y}\nAltyazı dili seç (1-{len(subtitles)}): {R}").strip()
+                try:
+                    sub_idx = int(sub_sec)
+                    if 1 <= sub_idx <= len(subtitles):
+                        chosen_sub_group = subtitles[sub_idx - 1]
+                        break
+                    else:
+                        print("Geçersiz seçim, tekrar deneyin.")
+                except ValueError:
+                    print("Lütfen bir sayı girin.")
+            logging.info(f"Seçilen altyazı: {chosen_sub_group}")
+
+        # ─────────────────────────────────────────────────────────────────────
+        # 4. İNDİRME DÖNGÜSÜ
+        # ─────────────────────────────────────────────────────────────────────
+        print("\n")
+
+        for ep in episodes_to_download:
+            label = f"Film" if is_movie else f"S{int(secilen_sezon):02d}E{ep:02d}"
+            logging.info(f"{label} indiriliyor...")
+
+            # İlk bölüm için probe verisini yeniden kullan, diğerleri için API çağır
+            if ep == first_ep and probe_data:
+                src_data = probe_data
+            else:
+                src_data = fetch_source(ep)
+
+            if not src_data:
+                logging.error(f"{label} atlandı: API yanıt vermedi.")
+                continue
+
+            if not src_data.get("success", False):
+                msg = src_data.get("msg", "Bilinmeyen hata")[:120]
+                logging.warning(f"{label} atlandı: {msg}")
+                continue
+
+            ep_groups    = src_data.get("groups", [])
+            ep_subtitles = src_data.get("subtitles", [])
+
+            # Seçilen dublaj grubunu bu bölümde bul
+            ep_group = next(
+                (g for g in ep_groups if g["group"] == chosen_dil_eki),
+                ep_groups[0] if ep_groups else None
+            )
+
+            if not ep_group:
+                logging.warning(f"{label} için '{chosen_dil_eki}' ses grubu bulunamadı, atlanıyor.")
+                continue
+
+            # En yüksek kaliteyi seç
+            items = ep_group.get("items", [])
+            best_item = max(items, key=lambda x: x.get("quality", 0)) if items else None
+            if not best_item:
+                logging.warning(f"{label} için video linki bulunamadı.")
+                continue
+
+            video_url = best_item["link"]
+            safe_name = "".join([c for c in anime_name if c.isalnum() or c in (" ", "-", "_")]).replace(" ", "_")
+
+            if is_movie:
+                file_name = os.path.join(download_path, f"{safe_name}_film_{chosen_dil_eki}.mp4")
+            else:
+                file_name = os.path.join(download_path, f"{safe_name}_S{int(secilen_sezon):02d}E{ep:02d}_{chosen_dil_eki}.mp4")
+
+            logging.info(f"Video URL: {video_url}")
+            logging.info(f"Dosya: {file_name}")
+            os.system(f'python -m yt_dlp "{video_url}" -o "{file_name}"')
+
+            # Altyazı indir
+            if ep_subtitles and chosen_sub_group:
+                # Seçilen dil bu bölümde mevcut mu kontrol et
+                ep_sub = next(
+                    (s for s in ep_subtitles if s["group"] == chosen_sub_group["group"]),
+                    ep_subtitles[0]   # yoksa ilki
+                )
+                sub_url = ep_sub["link"]
+                sub_file_name = file_name.replace(".mp4", ".vtt")
+                logging.info(f"Altyazı: {sub_url}")
+                try:
+                    response = page.request.get(sub_url)
+                    if response.ok:
+                        with open(sub_file_name, "wb") as sf:
+                            sf.write(response.body())
+                        logging.info(f"Altyazı indirildi: {sub_file_name}")
+                    else:
+                        logging.error(f"Altyazı indirilemedi: HTTP {response.status}")
+                except Exception as sub_err:
+                    logging.error(f"Altyazı indirilemedi: {sub_err}")
+            elif not ep_subtitles:
+                logging.info(f"{label} için altyazı mevcut değil.")
 
         browser.close()
         logging.info("Tüm işlemler tamamlandı.")
